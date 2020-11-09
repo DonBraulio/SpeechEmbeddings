@@ -1,0 +1,6 @@
+[submodule "Resemblyzer"]
+	path = Resemblyzer
+	url = ./Resemblyzer/
+[submodule "uis-rnn"]
+	path = uis-rnn
+	url = ./uis-rnn/

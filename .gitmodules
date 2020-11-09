@@ -1,6 +1,6 @@
 [submodule "Resemblyzer"]
 	path = Resemblyzer
-	url = ./Resemblyzer/
+	url = git@github.com:resemble-ai/Resemblyzer.git
 [submodule "uis-rnn"]
 	path = uis-rnn
-	url = ./uis-rnn/
+	url = git@github.com:google/uis-rnn.git

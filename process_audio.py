@@ -7,6 +7,8 @@ import numpy as np
 import librosa
 import matplotlib.pyplot as plt
 import webrtcvad as wrtcvad
+import speechbrain as sb
+from rich.progress import track
 
 # %%
 # Extract WAV audio fragment from any input file type
@@ -30,18 +32,18 @@ y, fs = librosa.load(input_audiofile)
 n_samples = len(y)
 duration = n_samples / fs
 t = np.linspace(0, duration, num=n_samples)
-fig, (ax1, ax2) = plt.subplots(nrows=2, sharex=True, figsize=(15, 10))
-ax1.plot(t, y)
-ax1.set_ylabel("Waveform")
-progress_lines.append(ax1.axvline(x=0, color="r"))
+fig, axes = plt.subplots(nrows=2, sharex=True, figsize=(15, 10))
+(wv_points,) = axes[0].plot(t, y)
+axes[0].set_ylabel("Waveform")
+# progress_lines.append(ax1.axvline(x=0, color="r"))
 
 # Plot fundamental frequency
 f0 = pysptk.swipe(y.astype(np.float64), fs=fs, hopsize=80, min=30, max=200, otype="f0")
 f0_t = np.linspace(0, duration, num=len(f0))
-ax2.plot(f0_t, f0, "g")
-ax2.set_ylabel("Fundamental freq (f0)")
-ax2.set_xlabel("time (s)")
-progress_lines.append(ax2.axvline(x=0, color="r", linestyle="--"))
+axes[1].plot(f0_t, f0, "g")
+axes[1].set_ylabel("Fundamental freq (f0)")
+axes[1].set_xlabel("time (s)")
+# progress_lines.append(ax2.axvline(x=0, color="r", linestyle="--"))
 
 # vad = wrtcvad.Vad(3)  # 3 is most aggressive filtering
 # is_voice = []
@@ -57,18 +59,48 @@ fps = 10
 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 
 fig.canvas.draw()
-frame_shape = fig.canvas.renderer.buffer_rgba().shape[1::-1]
+base_frame = cv2.cvtColor(
+    np.asarray(fig.canvas.renderer.buffer_rgba()), cv2.COLOR_RGBA2BGR
+)
+frame_shape = base_frame.shape[1::-1]
+
+# %%
+# Get matplotlib coordinates to draw progress line  (bottom-left is 0,0)
+# xlim_start, xlim_end = axes[0].get_xlim()
+xlim_start, xlim_end = wv_points.get_data()[0][[0, -1]]
+ylim_top = axes[0].get_ylim()[1]
+ylim_bottom = axes[-1].get_ylim()[0]  # Last plot, min Y value
+(px_start, px_top) = axes[0].transData.transform((xlim_start, ylim_top))
+(px_end, px_bottom) = axes[-1].transData.transform((xlim_end, ylim_bottom))
+px_fig_width, px_fig_height = fig.canvas.get_width_height()
+
+# Convert coordinates to refer them to top-left (matplotlib uses bottom-left as 0,0)
+px_top = int(px_fig_height - px_top)
+px_bottom = int(px_fig_height - px_bottom)
+
+px_length = abs(px_end - px_start)
+px_height = abs(px_bottom - px_top)
+progress_color_bgr = (0, 0, 255)
+
+# %%
+
 print(f"Frame shape: {frame_shape}")
 n_frames = int(duration * fps + 0.5)
 video = cv2.VideoWriter(out_features, fourcc, fps, frameSize=frame_shape)
-for i in range(n_frames):
-    current_pos = duration * i / n_frames
-    for lp in progress_lines:
-        lp.set_xdata(current_pos)
-    fig.canvas.draw()
-    frame = cv2.cvtColor(
-        np.asarray(fig.canvas.renderer.buffer_rgba()), cv2.COLOR_RGBA2BGR
-    )
+for i in track(range(n_frames), description="Generating video..."):
+    progress = i / n_frames
+    # current_pos = duration * progress
+
+    frame = base_frame.copy()
+    current_x = int(px_start + progress * px_length)
+    cv2.line(frame, (current_x, px_top), (current_x, px_bottom), progress_color_bgr, 1)
+
+    # for lp in progress_lines:
+    #     lp.set_xdata(current_pos)
+    # fig.canvas.draw()
+    # frame = cv2.cvtColor(
+    #     np.asarray(fig.canvas.renderer.buffer_rgba()), cv2.COLOR_RGBA2BGR
+    # )
     if frame.shape[1::-1] != frame_shape:
         print(f"New frame shape: {frame.shape[::-1]} | Init frame shape: {frame_shape}")
     video.write(frame)

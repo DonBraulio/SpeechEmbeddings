@@ -17,24 +17,30 @@ input_basename, input_extension = input_filename.split(".")
 input_audiofile = f"{input_basename}.wav"
 start_time = 10
 max_duration = 20
+sample_rate = 16000
 ffmpeg_cmd = (
     f"ffmpeg -y -i {input_filename} -ss {start_time} -t {max_duration}"
-    f" -c:a pcm_s16le -ar 16000 {input_audiofile}"
+    f" -c:a pcm_s16le -ar {sample_rate} {input_audiofile}"
 )
 
 print(ffmpeg_cmd)
 os.system(ffmpeg_cmd)
 
 # %%
-# Plot waveform
+# Load wav file as signal
 progress_lines = []
-y, fs = librosa.load(input_audiofile)
+y, fs = librosa.load(input_audiofile, sr=sample_rate)
+assert fs == sample_rate
 n_samples = len(y)
 duration = n_samples / fs
 t = np.linspace(0, duration, num=n_samples)
-fig, axes = plt.subplots(nrows=2, sharex=True, figsize=(15, 10))
+
+# %%
+# Plot waveform (static)
+fig, axes = plt.subplots(nrows=3, sharex=True, figsize=(30, 20))
 (wv_points,) = axes[0].plot(t, y)
 axes[0].set_ylabel("Waveform")
+axes[0].set_xlabel("time (s)")
 # progress_lines.append(ax1.axvline(x=0, color="r"))
 
 # Plot fundamental frequency
@@ -42,11 +48,30 @@ f0 = pysptk.swipe(y.astype(np.float64), fs=fs, hopsize=80, min=30, max=200, otyp
 f0_t = np.linspace(0, duration, num=len(f0))
 axes[1].plot(f0_t, f0, "g")
 axes[1].set_ylabel("Fundamental freq (f0)")
-axes[1].set_xlabel("time (s)")
+
 # progress_lines.append(ax2.axvline(x=0, color="r", linestyle="--"))
 
-# vad = wrtcvad.Vad(3)  # 3 is most aggressive filtering
-# is_voice = []
+# VAD (Voice Activity Detector)
+def float_to_pcm16(audio):
+    ints = (audio * 32767).astype(np.int16)
+    little_endian = ints.astype("<u2")
+    buf = little_endian.tostring()
+    return buf
+
+
+buffer_size = int(20e-3 * sample_rate)  # 20 msec (webrtc accepts 10, 20 or 30ms)
+vad = wrtcvad.Vad(3)  # 3 is most aggressive filtering
+is_voice = np.zeros_like(y)
+for start_idx in range(0, n_samples, buffer_size):
+    end_idx = min(start_idx + buffer_size, n_samples)
+    buffer_samples = y[start_idx:end_idx]
+    # print(f"{start_idx}:{end_idx} buffer.shape: {buffer_samples.shape}")
+    vad_result = vad.is_speech(float_to_pcm16(buffer_samples), sample_rate)
+    is_voice[start_idx:end_idx] = vad_result
+    # print(f"{start_idx}:{end_idx} -> {vad_result}")
+
+axes[2].plot(t, is_voice, "r")
+axes[2].set_ylabel("VAD")
 
 # %%
 # Generate animated video from plots above

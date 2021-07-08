@@ -5,10 +5,13 @@ import cv2
 import pysptk
 import numpy as np
 import librosa
+import torchaudio
 import matplotlib.pyplot as plt
 import webrtcvad as wrtcvad
 import speechbrain as sb
+from matplotlib import cm
 from rich.progress import track
+from speechbrain.pretrained import EncoderClassifier
 
 # %%
 # Extract WAV audio fragment from any input file type
@@ -24,13 +27,24 @@ ffmpeg_cmd = (
 )
 
 print(ffmpeg_cmd)
-os.system(ffmpeg_cmd)
+# os.system(ffmpeg_cmd)
+
+# %%
+input_audiofile = "voice_and_guitar.wav"
+# %%
+signal, fs = torchaudio.load(input_audiofile)
+assert fs == 16000  # Required by encode_batch
+
+# Cut the signal to an integer number of seconds
+signal = signal.squeeze()
+signal = signal[: (len(signal) // fs) * fs]
+
 
 # %%
 # Load wav file as signal
-progress_lines = []
-y, fs = librosa.load(input_audiofile, sr=sample_rate)
-assert fs == sample_rate
+# y, fs = librosa.load(input_audiofile, sr=sample_rate)
+# assert fs == sample_rate
+y = signal.squeeze().numpy()
 n_samples = len(y)
 duration = n_samples / fs
 t = np.linspace(0, duration, num=n_samples)
@@ -44,12 +58,26 @@ axes[0].set_xlabel("time (s)")
 # progress_lines.append(ax1.axvline(x=0, color="r"))
 
 # Plot fundamental frequency
-f0 = pysptk.swipe(y.astype(np.float64), fs=fs, hopsize=80, min=30, max=200, otype="f0")
-f0_t = np.linspace(0, duration, num=len(f0))
-axes[1].plot(f0_t, f0, "g")
-axes[1].set_ylabel("Fundamental freq (f0)")
+# f0 = pysptk.swipe(y.astype(np.float64), fs=fs, hopsize=80, min=30, max=200, otype="f0")
+# f0_t = np.linspace(0, duration, num=len(f0))
+# axes[1].plot(f0_t, f0, "g")
+# axes[1].set_ylabel("Fundamental freq (f0)")
 
 # progress_lines.append(ax2.axvline(x=0, color="r", linestyle="--"))
+
+# SpeechBrain embeddings ecapa-tdnn in voxceleb
+classifier = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb")
+batch = signal.reshape([-1, fs // 20])  # turn signal into batch of 100 msec wavs
+
+embeddings = classifier.encode_batch(batch).squeeze().T
+
+cmap = cm.get_cmap()
+mappable = axes[1].imshow(
+    embeddings, cmap=cmap, extent=[0, duration, 0, embeddings.shape[0]], aspect="auto"
+)
+# plt.colorbar(mappable, ax=ax)  # , fraction=0.046, pad=0.04)
+
+# ax.set_xticks([]), ax.set_yticks([])
 
 # VAD (Voice Activity Detector)
 def float_to_pcm16(audio):

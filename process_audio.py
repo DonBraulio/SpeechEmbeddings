@@ -56,11 +56,8 @@ duration_secs = len(signal) // fs
 print(f"Loaded signal duration: {duration_secs}")
 signal = signal[: duration_secs * fs]
 
-
 # %%
-# Load wav file as signal
-# y, fs = librosa.load(input_audiofile, sr=sample_rate)
-# assert fs == sample_rate
+# Numpy signal
 y = signal.squeeze().numpy()
 n_samples = len(y)
 duration = n_samples / fs
@@ -72,25 +69,39 @@ fig, axes = plt.subplots(nrows=3, sharex=True, figsize=(30, 20))
 (wv_points,) = axes[0].plot(t, y)
 axes[0].set_ylabel("Waveform")
 axes[0].set_xlabel("time (s)")
-# progress_lines.append(ax1.axvline(x=0, color="r"))
-
-# Plot fundamental frequency
-# f0 = pysptk.swipe(y.astype(np.float64), fs=fs, hopsize=80, min=30, max=200, otype="f0")
-# f0_t = np.linspace(0, duration, num=len(f0))
-# axes[1].plot(f0_t, f0, "g")
-# axes[1].set_ylabel("Fundamental freq (f0)")
-
-# progress_lines.append(ax2.axvline(x=0, color="r", linestyle="--"))
 
 # SpeechBrain embeddings ecapa-tdnn in voxceleb
-classifier = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb")
-batch = signal.reshape([-1, fs // 20])  # turn signal into batch of 100 msec wavs
+# classifier = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb")
+# batch = signal.reshape([-1, fs // 20])  # turn signal into batch of 100 msec wavs
+# embeddings = classifier.encode_batch(batch).squeeze().T
 
-embeddings = classifier.encode_batch(batch).squeeze().T
+# cmap = cm.get_cmap()
+# mappable = axes[1].imshow(
+#     embeddings, cmap=cmap, extent=[0, duration, 0, embeddings.shape[0]], aspect="auto"
+# )
 
+# %%
+# MFCC coeficients
+
+mfcc_maker = features.MFCC(
+        deltas=False,
+        sample_rate=16000,
+        f_min=0,
+        f_max=None,
+        n_fft=400,
+        n_mels=23,
+        n_mfcc=20,
+        filter_shape="triangular",
+        left_frames=5,
+        right_frames=5,
+        win_length=25,
+        hop_length=10,
+)
+mfcc_signal = mfcc_maker(signal.unsqueeze(0))[0].T
+# %%
 cmap = cm.get_cmap()
 mappable = axes[1].imshow(
-    embeddings, cmap=cmap, extent=[0, duration, 0, embeddings.shape[0]], aspect="auto"
+    mfcc_signal, cmap=cmap, extent=[0, duration, 0, mfcc_signal.shape[0]], aspect="auto", interpolation="none"
 )
 # plt.colorbar(mappable, ax=ax)  # , fraction=0.046, pad=0.04)
 # ax.set_xticks([]), ax.set_yticks([])

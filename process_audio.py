@@ -81,30 +81,32 @@ axes[0].set_xlabel("time (s)")
 # )
 
 # %%
-# MFCC coeficients
+# MFCC coeficients: STFT + Filterbank + DCT
 
+# context=False is equivalent to setting left_frames and right_frames=0
 mfcc_maker = features.MFCC(
         deltas=False,
+        context=False,
         sample_rate=16000,
         f_min=0,
         f_max=None,
         n_fft=400,
-        n_mels=23,
-        n_mfcc=20,
-        filter_shape="triangular",
-        left_frames=5,
-        right_frames=5,
+        n_mels=23,  # default: 23,
+        n_mfcc=20,  # default: 20,
+        filter_shape="gaussian",  # default: "triangular",
+        left_frames=0,  # default: 5
+        right_frames=0,  # default: 5,
         win_length=25,
-        hop_length=10,
+        hop_length=15  # default: 10,
 )
 mfcc_signal = mfcc_maker(signal.unsqueeze(0))[0].T
+print(f"MFCC shape: {mfcc_signal.shape}")
+
 # %%
 cmap = cm.get_cmap()
 mappable = axes[1].imshow(
     mfcc_signal, cmap=cmap, extent=[0, duration, 0, mfcc_signal.shape[0]], aspect="auto", interpolation="none"
 )
-# plt.colorbar(mappable, ax=ax)  # , fraction=0.046, pad=0.04)
-# ax.set_xticks([]), ax.set_yticks([])
 
 # VAD (Voice Activity Detector)
 def float_to_pcm16(audio):
@@ -120,10 +122,8 @@ is_voice = np.zeros_like(y)
 for start_idx in range(0, n_samples, buffer_size):
     end_idx = min(start_idx + buffer_size, n_samples)
     buffer_samples = y[start_idx:end_idx]
-    # print(f"{start_idx}:{end_idx} buffer.shape: {buffer_samples.shape}")
     vad_result = vad.is_speech(float_to_pcm16(buffer_samples), sample_rate)
     is_voice[start_idx:end_idx] = vad_result
-    # print(f"{start_idx}:{end_idx} -> {vad_result}")
 
 axes[2].plot(t, is_voice, "r")
 axes[2].set_ylabel("VAD")
@@ -169,18 +169,11 @@ n_frames = int(duration * fps + 0.5)
 video = cv2.VideoWriter(f_features, fourcc, fps, frameSize=frame_shape)
 for i in track(range(n_frames), description="Generating video..."):
     progress = i / n_frames
-    # current_pos = duration * progress
 
     frame = base_frame.copy()
     current_x = int(px_start + progress * px_length)
     cv2.line(frame, (current_x, px_top), (current_x, px_bottom), progress_color_bgr, 1)
 
-    # for lp in progress_lines:
-    #     lp.set_xdata(current_pos)
-    # fig.canvas.draw()
-    # frame = cv2.cvtColor(
-    #     np.asarray(fig.canvas.renderer.buffer_rgba()), cv2.COLOR_RGBA2BGR
-    # )
     if frame.shape[1::-1] != frame_shape:
         print(f"New frame shape: {frame.shape[::-1]} | Init frame shape: {frame_shape}")
     video.write(frame)

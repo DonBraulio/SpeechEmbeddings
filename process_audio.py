@@ -1,43 +1,60 @@
 # %%
 import os
+import glob
 import sys
 import cv2
-import pysptk
+
+# import pysptk
 import numpy as np
-import librosa
+
+# import librosa
 import torchaudio
 import matplotlib.pyplot as plt
 import webrtcvad as wrtcvad
 import speechbrain as sb
+
+from pathlib import Path
 from matplotlib import cm
+from rich import print
 from rich.progress import track
 from speechbrain.pretrained import EncoderClassifier
+from speechbrain.lobes import features
+
+# %%
+files_recs = glob.glob("Datasets/Clases/*.mp4")
+for idx, f in enumerate(files_recs):
+    f_path = Path(f)
+    files_recs[idx] = f_path
+    print(f"{idx}: {f_path.name}")
+
+f_input = files_recs[int(input("File index to use: "))]
+print(f"[green]Selected:[/green] {f_input.name}")
+input_audiofile = f_input.with_suffix(".wav")
 
 # %%
 # Extract WAV audio fragment from any input file type
-input_filename = "PC_1107003_5A_7112019_REC-2019-11-07T14_15_00Z.mp4"
-input_basename, input_extension = input_filename.split(".")
-input_audiofile = f"{input_basename}.wav"
 start_time = 10
 max_duration = 20
 sample_rate = 16000
 ffmpeg_cmd = (
-    f"ffmpeg -y -i {input_filename} -ss {start_time} -t {max_duration}"
+    f"ffmpeg -y -i {f_input} -ss {start_time} -t {max_duration}"
     f" -c:a pcm_s16le -ar {sample_rate} {input_audiofile}"
 )
 
-print(ffmpeg_cmd)
-# os.system(ffmpeg_cmd)
+if input("Run ffmpeg? [y/n]") == "y":
+    print(ffmpeg_cmd)
+    os.system(ffmpeg_cmd)
 
 # %%
-input_audiofile = "voice_and_guitar.wav"
-# %%
+print(f"Loading: {input_audiofile.name}")
 signal, fs = torchaudio.load(input_audiofile)
 assert fs == 16000  # Required by encode_batch
 
 # Cut the signal to an integer number of seconds
 signal = signal.squeeze()
-signal = signal[: (len(signal) // fs) * fs]
+duration_secs = len(signal) // fs
+print(f"Loaded signal duration: {duration_secs}")
+signal = signal[: duration_secs * fs]
 
 
 # %%
@@ -76,7 +93,6 @@ mappable = axes[1].imshow(
     embeddings, cmap=cmap, extent=[0, duration, 0, embeddings.shape[0]], aspect="auto"
 )
 # plt.colorbar(mappable, ax=ax)  # , fraction=0.046, pad=0.04)
-
 # ax.set_xticks([]), ax.set_yticks([])
 
 # VAD (Voice Activity Detector)
@@ -103,11 +119,6 @@ axes[2].set_ylabel("VAD")
 
 # %%
 # Generate animated video from plots above
-out_features = f"features_{input_basename}.mp4"
-try:
-    os.remove(out_features)
-except FileNotFoundError:
-    pass
 fps = 10
 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 
@@ -136,10 +147,15 @@ px_height = abs(px_bottom - px_top)
 progress_color_bgr = (0, 0, 255)
 
 # %%
+f_features = f"features_{f_input.with_suffix('.mp4').name}"
+try:
+    os.remove(f_features)
+except FileNotFoundError:
+    pass
 
 print(f"Frame shape: {frame_shape}")
 n_frames = int(duration * fps + 0.5)
-video = cv2.VideoWriter(out_features, fourcc, fps, frameSize=frame_shape)
+video = cv2.VideoWriter(f_features, fourcc, fps, frameSize=frame_shape)
 for i in track(range(n_frames), description="Generating video..."):
     progress = i / n_frames
     # current_pos = duration * progress
@@ -161,10 +177,13 @@ video.release()
 
 # %%
 # Combine features (video) and audio into single video file
-out_filename = f"out_{input_basename}.mp4"
+out_filename = f_input.parent / f"{f_input.stem}_out.mp4"
 os.system(
-    f"ffmpeg -y -i {out_features} -i {input_audiofile}"
+    f"ffmpeg -y -i {f_features} -i {input_audiofile}"
     f" -c:v copy -c:a aac {out_filename}"
 )
 
+print(f"Output audio/features video: {out_filename}")
 # %%
+print(f"Removing auxiliary file: {f_features}")
+os.remove(f_features)

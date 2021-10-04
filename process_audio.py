@@ -39,8 +39,15 @@ input_audiofile = f_input.with_suffix(".wav")
 
 # %%
 # Extract WAV audio fragment from any input file type
-start_time = timedelta(minutes=2, seconds=15)
-max_duration = timedelta(seconds=60)
+
+# Train
+# start_time = timedelta(minutes=2, seconds=15)
+# max_duration = timedelta(seconds=60)
+
+# Test
+start_time = timedelta(minutes=23, seconds=24)
+max_duration = timedelta(seconds=25)
+
 sample_rate = 16000
 ffmpeg_cmd = (
     f"ffmpeg -y -i {f_input} -ss {start_time} -t {max_duration.seconds}"
@@ -172,10 +179,10 @@ t_mfcc = np.linspace(t_start, t_end, num=mfcc_signal.shape[0])
 
 # Resample VAD to same size as mfcc
 eval_vad = interp1d(t, is_voice, kind="nearest")
-vad_mask = torch.Tensor(eval_vad(t_mfcc).astype(int))
+vad_mask = eval_vad(t_mfcc).astype(int)
 
 # Set mfcc=0 in the parts where VAD=0
-mfcc_vad = mfcc_signal * vad_mask.broadcast_to(mfcc_signal.shape[1], -1).T
+mfcc_vad = mfcc_signal * torch.Tensor(vad_mask).broadcast_to(mfcc_signal.shape[1], -1).T
 
 # Mean of MFCC vector
 mean_mfcc = mfcc_vad.mean(axis=0)
@@ -183,10 +190,39 @@ mean_mfcc = mfcc_vad.mean(axis=0)
 # Cosine similarity to mean
 mfcc_cos = mfcc_vad.matmul(mean_mfcc) / (mfcc_vad.norm(dim=1) * mean_mfcc.norm() + 1e-6)
 
+# %%
+df = pd.DataFrame(mfcc_vad.numpy())
+cols_mfcc = df.columns
+df["t"] = t_mfcc
+df["vad"] = vad_mask.astype(bool)
+COL_LABEL = "label"
+df[COL_LABEL] = eval_labels(t_mfcc).astype(int)
+
+# %%
+# Train AutoGLUON
+train = False
+if train:
+    df_train = df[df["vad"] & (df[COL_LABEL] != LABEL_NONE_ID)]
+    predictor = TabularPredictor(label=COL_LABEL).fit(train_data=df_train)
+    print("[green]Finished training[/green]")
+else:
+    predictor = TabularPredictor.load("AutogluonModels/ag-20211002_203405/")
+    print("[green]Loaded pre-trained model[/green]")
+
+# predictions = predictor.predict(TEST_DATA.csv)
+
+# %%
+predictions = predictor.predict(df)
+
+# %%
+# TODO
+# Set label = none where VAD=0
+# Create training set, removing "none"
+# Predict the whole audio and check results
 
 # %%
 # Plot waveform, features and labels
-fig, axes = get_figure(n_axes=5)
+fig, axes = get_figure(n_axes=6)
 (wv_points,) = axes[0].plot(t, y)
 axes[0].set_ylabel("Waveform")
 axes[0].set_xlabel("time (s)")
@@ -202,15 +238,12 @@ axes[2].imshow(
 axes[3].plot(t_mfcc, mfcc_cos, "b")
 axes[3].set_ylabel("cos(mfcc, mean_mfcc)")
 axes[4].plot(t_mfcc, eval_labels(t_mfcc), "g")
-axes[4].set_ylabel("label")
+axes[4].set_ylabel("true_label")
 axes[4].set_yticks(list(label_id_map.values()))
 axes[4].set_yticklabels(list(label_id_map.keys()))
 
-# %%
-# TODO
-# predictor = TabularPredictor(label=COLUMN_NAME).fit(train_data=TRAIN_DATA.csv)
-# predictions = predictor.predict(TEST_DATA.csv)
-
+axes[5].plot(t_mfcc, predictions, "k")
+axes[5].set_ylabel("predicted_label")
 
 # %%
 # Generate animated video from plots above

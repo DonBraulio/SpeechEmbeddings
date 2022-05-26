@@ -4,3 +4,6 @@
 [submodule "uis-rnn"]
 	path = uis-rnn
 	url = git@github.com:google/uis-rnn.git
+[submodule "pyannote-audio"]
+	path = pyannote-audio
+	url = git@github.com:pyannote/pyannote-audio.git

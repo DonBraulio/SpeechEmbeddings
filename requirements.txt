@@ -1,0 +1,7 @@
+matplotlib
+speechbrain
+opencv-python
+dvc[gdrive]
+pandas
+autogluon
+webrtcvad

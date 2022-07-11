@@ -1,8 +1,4 @@
-# Diarization
-
-Some demos about STFT (fourier) and Mel spectrogram [spectrograms.py](spectrograms.py), and
-basic diarization [diarization_demo.ipynb](diarization_demo.ipynb) using Resemblyzer VoiceEncoder
-(based on GE2E loss).
+# Speech processing, speaker identificaiton and diarization
 
 ```bash
 git clone <this repo>

@@ -1,7 +1,7 @@
 matplotlib
 speechbrain
-opencv-python
+# opencv-python
 dvc[gdrive]
 pandas
-autogluon
+# autogluon
 webrtcvad

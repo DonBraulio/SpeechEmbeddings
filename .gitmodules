@@ -7,3 +7,6 @@
 [submodule "pyannote-audio"]
 	path = pyannote-audio
 	url = git@github.com:pyannote/pyannote-audio.git
+[submodule "sentencepiece"]
+	path = sentencepiece
+	url = git@github.com:google/sentencepiece.git
